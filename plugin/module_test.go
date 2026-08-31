@@ -13,6 +13,7 @@ import (
 
 	sdk "github.com/bomly-dev/bomly-sdk"
 	"github.com/bomly-dev/bomly-sdk/conformance"
+	"github.com/bomly-dev/bomly-sdk/testkit"
 	"go.uber.org/zap"
 )
 
@@ -72,9 +73,7 @@ func newDepsDevServer(t *testing.T) *httptest.Server {
 func newDeltaGraphAndRegistry(t *testing.T) (*sdk.Graph, *sdk.PackageRegistry) {
 	t.Helper()
 	graph := sdk.New()
-	dep := sdk.NewDependencyRef("left-pad", "1.3.0")
-	dep.PURL = "pkg:npm/left-pad@1.3.0"
-	dep.Ecosystem = sdk.EcosystemNPM
+	dep := testkit.MustDependencyNode(t, "pkg:npm/left-pad@1.3.0")
 	if err := graph.AddNode(dep); err != nil {
 		t.Fatalf("AddNode: %v", err)
 	}
