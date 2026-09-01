@@ -1,3 +1,5 @@
 /bin/
 /dist/
 /.bomly-cache/
+go.work
+go.work.sum

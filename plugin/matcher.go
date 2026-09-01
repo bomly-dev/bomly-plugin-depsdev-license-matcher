@@ -270,7 +270,7 @@ func (l *licenseCollector) apply(pkg *sdk.Package, values []string) int {
 	if pkg == nil || len(pkg.Licenses) > 0 {
 		return 0
 	}
-	normalized := matchers.NormalizeLicenseSet(values, SourceType)
+	normalized := matchers.NormalizeLicenseSetFrom(values, string(sdk.LicenseTypeDeclared), SourceType)
 	if len(normalized) == 0 {
 		return 0
 	}

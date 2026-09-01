@@ -12,6 +12,7 @@ import (
 
 	"github.com/bomly-dev/bomly-sdk"
 	cache "github.com/bomly-dev/bomly-sdk/filecache"
+	"github.com/bomly-dev/bomly-sdk/testkit"
 	"go.uber.org/zap"
 )
 
@@ -140,7 +141,7 @@ func TestCheckerMatch_RefetchesCachedEmptyLicenseSet(t *testing.T) {
 	}
 
 	g := sdk.New()
-	dep := sdk.NewDependency(sdk.Dependency{Coordinates: sdk.Coordinates{Ecosystem: sdk.EcosystemGo, Name: "golang.org/x/net", Version: "v0.55.0"}})
+	dep := testkit.MustDependencyCoords(t, sdk.Coordinates{Ecosystem: sdk.EcosystemGo, Name: "golang.org/x/net", Version: "v0.55.0"})
 	if err := g.AddNode(dep); err != nil {
 		t.Fatalf("add dependency: %v", err)
 	}
@@ -188,7 +189,7 @@ func TestCheckerMatch_DoesNotCacheEmptyAPIResponse(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		g := sdk.New()
-		dep := sdk.NewDependency(sdk.Dependency{Coordinates: sdk.Coordinates{Ecosystem: sdk.EcosystemGo, Name: "golang.org/x/net", Version: "v0.55.0"}})
+		dep := testkit.MustDependencyCoords(t, sdk.Coordinates{Ecosystem: sdk.EcosystemGo, Name: "golang.org/x/net", Version: "v0.55.0"})
 		if err := g.AddNode(dep); err != nil {
 			t.Fatalf("add dependency: %v", err)
 		}
@@ -239,7 +240,7 @@ func TestCheckerMatch_ChunksVersionBatchRequests(t *testing.T) {
 	g := sdk.New()
 	for i := 0; i < maxBatchRequests+1; i++ {
 		name := "example.com/mod" + strconv.Itoa(i)
-		dep := sdk.NewDependency(sdk.Dependency{Coordinates: sdk.Coordinates{Ecosystem: sdk.EcosystemGo, Name: name, Version: "v1.0.0"}})
+		dep := testkit.MustDependencyCoords(t, sdk.Coordinates{Ecosystem: sdk.EcosystemGo, Name: name, Version: "v1.0.0"})
 		if err := g.AddNode(dep); err != nil {
 			t.Fatalf("add dependency %d: %v", i, err)
 		}
@@ -296,8 +297,8 @@ func TestCheckerMatch_EnrichesMissingOnly(t *testing.T) {
 	}
 
 	g := sdk.New()
-	missing := sdk.NewDependency(sdk.Dependency{Coordinates: sdk.Coordinates{Ecosystem: "npm", Name: "react", Version: "18.2.0"}})
-	existing := sdk.NewDependency(sdk.Dependency{Coordinates: sdk.Coordinates{Ecosystem: "npm", Name: "zod", Version: "3.23.0"}})
+	missing := testkit.MustDependencyCoords(t, sdk.Coordinates{Ecosystem: "npm", Name: "react", Version: "18.2.0"})
+	existing := testkit.MustDependencyCoords(t, sdk.Coordinates{Ecosystem: "npm", Name: "zod", Version: "3.23.0"})
 	if err := g.AddNode(missing); err != nil {
 		t.Fatalf("add missing dependency: %v", err)
 	}
@@ -306,7 +307,7 @@ func TestCheckerMatch_EnrichesMissingOnly(t *testing.T) {
 	}
 
 	registry := sdk.NewPackageRegistry()
-	existingPURL := sdk.CanonicalPackageURLFromDependency(existing)
+	existingPURL := existing.NodeID()
 	registry.Ensure(existingPURL).Licenses = []sdk.PackageLicense{{SPDXExpression: "Apache-2.0"}}
 
 	result, err := checker.Match(context.Background(), sdk.MatchRequest{
@@ -319,7 +320,7 @@ func TestCheckerMatch_EnrichesMissingOnly(t *testing.T) {
 	if result.Registry != registry {
 		t.Fatalf("expected registry to be enriched in place")
 	}
-	missingPkg, _ := result.Registry.Get(sdk.CanonicalPackageURLFromDependency(missing))
+	missingPkg, _ := result.Registry.Get(missing.NodeID())
 	if missingPkg == nil || len(missingPkg.LicenseValues()) != 1 || missingPkg.LicenseValues()[0] != "MIT" {
 		t.Fatalf("expected missing package licenses to be enriched, got %#v", missingPkg)
 	}
