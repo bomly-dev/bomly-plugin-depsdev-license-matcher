@@ -219,10 +219,7 @@ func (c *Checker) Match(ctx context.Context, req sdk.MatchRequest) (sdk.MatchRes
 	}
 
 	for start := 0; start < len(pendingItems); start += maxBatchRequests {
-		end := start + maxBatchRequests
-		if end > len(pendingItems) {
-			end = len(pendingItems)
-		}
+		end := min(start+maxBatchRequests, len(pendingItems))
 		chunk := pendingItems[start:end]
 		if err := c.fetchBatch(ctx, chunk, &stats, collector); err != nil {
 			return matchResponse(req.Registry, collector.updates, useDeltas, matcherStats(stats.cacheApplied+stats.apiEnriched, stats.requested-stats.cacheApplied-stats.apiEnriched, stats.cacheLicenses+stats.apiLicenses)), err

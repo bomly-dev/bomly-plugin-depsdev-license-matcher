@@ -187,7 +187,7 @@ func TestCheckerMatch_DoesNotCacheEmptyAPIResponse(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		g := sdk.New()
 		dep := testkit.MustDependencyCoords(t, sdk.Coordinates{Ecosystem: sdk.EcosystemGo, Name: "golang.org/x/net", Version: "v0.55.0"})
 		if err := g.AddNode(dep); err != nil {
@@ -238,7 +238,7 @@ func TestCheckerMatch_ChunksVersionBatchRequests(t *testing.T) {
 	}
 
 	g := sdk.New()
-	for i := 0; i < maxBatchRequests+1; i++ {
+	for i := range maxBatchRequests + 1 {
 		name := "example.com/mod" + strconv.Itoa(i)
 		dep := testkit.MustDependencyCoords(t, sdk.Coordinates{Ecosystem: sdk.EcosystemGo, Name: name, Version: "v1.0.0"})
 		if err := g.AddNode(dep); err != nil {
@@ -256,7 +256,7 @@ func TestCheckerMatch_ChunksVersionBatchRequests(t *testing.T) {
 	if result.MatcherStats.MatchedPackages != maxBatchRequests+1 {
 		t.Fatalf("matched packages = %d, want %d", result.MatcherStats.MatchedPackages, maxBatchRequests+1)
 	}
-	for i := 0; i < maxBatchRequests+1; i++ {
+	for i := range maxBatchRequests + 1 {
 		purl := "pkg:golang/example.com/mod" + strconv.Itoa(i) + "@v1.0.0"
 		pkg, ok := result.Registry.Get(purl)
 		if !ok || len(pkg.LicenseValues()) != 1 || pkg.LicenseValues()[0] != "BSD-3-Clause" {
