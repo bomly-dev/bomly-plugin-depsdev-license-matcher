@@ -14,11 +14,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bomly-dev/bomly-sdk"
 	cache "github.com/bomly-dev/bomly-sdk/filecache"
 	matchers "github.com/bomly-dev/bomly-sdk/matcherkit"
 	"github.com/bomly-dev/bomly-sdk/system"
 	"go.uber.org/zap"
+
+	"github.com/bomly-dev/bomly-sdk/httpkit"
+	"github.com/bomly-dev/bomly-sdk/model"
+	sdkplugin "github.com/bomly-dev/bomly-sdk/plugin"
 )
 
 const (
@@ -45,7 +48,7 @@ type Config struct {
 	CacheTTL           time.Duration
 	Logger             *zap.Logger
 	Client             *http.Client
-	HTTPClientProvider *sdk.HTTPClientProvider
+	HTTPClientProvider *httpkit.ClientProvider
 }
 
 // DefaultConfig returns a production-ready deps.dev matcher config.
@@ -74,7 +77,7 @@ type Checker struct {
 }
 
 type pending struct {
-	pkg *sdk.Package
+	pkg *model.Package
 	key cache.Key
 	req versionRequest
 }
@@ -118,7 +121,7 @@ func New(config Config) (*Checker, error) {
 	if client == nil {
 		provider := config.HTTPClientProvider
 		if provider == nil {
-			provider, err = sdk.NewHTTPClientProviderFromEnv()
+			provider, err = httpkit.NewClientProviderFromEnv()
 			if err != nil {
 				return nil, fmt.Errorf("deps.dev matcher: create HTTP client provider: %w", err)
 			}
@@ -134,8 +137,8 @@ func New(config Config) (*Checker, error) {
 }
 
 // Descriptor returns the matcher registration metadata.
-func (c *Checker) Descriptor() sdk.MatcherDescriptor {
-	return sdk.MatcherDescriptor{
+func (c *Checker) Descriptor() sdkplugin.MatcherDescriptor {
+	return sdkplugin.MatcherDescriptor{
 		Name:        Name,
 		DisplayName: displayName,
 		Aliases:     []string{"deps.dev"},
@@ -144,30 +147,30 @@ func (c *Checker) Descriptor() sdk.MatcherDescriptor {
 		// registry mutations this matcher performs — filling Licenses on
 		// packages that have none and ORing Matched in — are exactly what
 		// Package.MergeFrom does when the host applies a delta.
-		Capabilities: []string{sdk.CapabilityPackageUpdates},
+		Capabilities: []string{sdkplugin.CapabilityPackageUpdates},
 		// Kept in step with depsDevSystem, which is the set of ecosystems
 		// deps.dev exposes a package system for. Packages from anything else
 		// are skipped, so declaring the list keeps the generated docs and
 		// `bomly plugins list` honest instead of implying full coverage.
-		SupportedEcosystems: []sdk.Ecosystem{
-			sdk.EcosystemNPM,
-			sdk.EcosystemMaven,
-			sdk.EcosystemGo,
-			sdk.EcosystemPython,
-			sdk.EcosystemDotNet,
-			sdk.EcosystemRuby,
-			sdk.EcosystemRust,
+		SupportedEcosystems: []model.Ecosystem{
+			model.EcosystemNPM,
+			model.EcosystemMaven,
+			model.EcosystemGo,
+			model.EcosystemPython,
+			model.EcosystemDotNet,
+			model.EcosystemRuby,
+			model.EcosystemRust,
 		},
 	}
 }
 
 // Ready reports whether the checker can run.
-func (c *Checker) Ready(context.Context, sdk.MatchRequest) error {
+func (c *Checker) Ready(context.Context, sdkplugin.MatchRequest) error {
 	return nil
 }
 
 // Applicable reports whether the checker applies to the request.
-func (c *Checker) Applicable(_ context.Context, req sdk.MatchRequest) (bool, error) {
+func (c *Checker) Applicable(_ context.Context, req sdkplugin.MatchRequest) (bool, error) {
 	return req.Graph != nil, nil
 }
 
@@ -181,7 +184,7 @@ func (c *Checker) Applicable(_ context.Context, req sdk.MatchRequest) (bool, err
 // when the target package has none — the same fill-when-empty rule this
 // matcher applies in place — so applying the deltas reproduces the in-place
 // enrichment.
-func (c *Checker) Match(ctx context.Context, req sdk.MatchRequest) (sdk.MatchResult, error) {
+func (c *Checker) Match(ctx context.Context, req sdkplugin.MatchRequest) (sdkplugin.MatchResult, error) {
 	useDeltas := req.AcceptPackageUpdates
 	if req.Graph == nil || req.Registry == nil {
 		return matchResponse(req.Registry, nil, useDeltas, matcherStats(0, 0, 0)), nil
@@ -247,33 +250,33 @@ func (c *Checker) Match(ctx context.Context, req sdk.MatchRequest) (sdk.MatchRes
 }
 
 // matchResponse assembles the result for the requested response shape.
-func matchResponse(registry *sdk.PackageRegistry, updates []*sdk.Package, useDeltas bool, stats sdk.MatcherStats) sdk.MatchResult {
+func matchResponse(registry *model.PackageRegistry, updates []*model.Package, useDeltas bool, stats sdkplugin.MatcherStats) sdkplugin.MatchResult {
 	if useDeltas {
-		return sdk.MatchResult{PackageUpdates: updates, MatcherStats: stats}
+		return sdkplugin.MatchResult{PackageUpdates: updates, MatcherStats: stats}
 	}
-	return sdk.MatchResult{Registry: registry, MatcherStats: stats}
+	return sdkplugin.MatchResult{Registry: registry, MatcherStats: stats}
 }
 
 // licenseCollector applies license enrichment in the shape the host asked
 // for: in place on registry packages (legacy) or as package-update deltas.
 type licenseCollector struct {
 	useDeltas bool
-	updates   []*sdk.Package
+	updates   []*model.Package
 }
 
 // apply records normalized licenses for pkg and returns how many were
 // attached, or 0 when the package already has licenses or none normalize.
-func (l *licenseCollector) apply(pkg *sdk.Package, values []string) int {
+func (l *licenseCollector) apply(pkg *model.Package, values []string) int {
 	if pkg == nil || len(pkg.Licenses) > 0 {
 		return 0
 	}
-	normalized := matchers.NormalizeLicenseSetFrom(values, string(sdk.LicenseTypeDeclared), SourceType)
+	normalized := matchers.NormalizeLicenseSetFrom(values, string(model.LicenseTypeDeclared), SourceType)
 	if len(normalized) == 0 {
 		return 0
 	}
 	if l.useDeltas {
-		l.updates = append(l.updates, &sdk.Package{
-			Coordinates: sdk.Coordinates{PURL: pkg.PURL},
+		l.updates = append(l.updates, &model.Package{
+			Coordinates: model.Coordinates{PURL: pkg.PURL},
 			Matched:     true,
 			Licenses:    normalized,
 		})
@@ -284,11 +287,11 @@ func (l *licenseCollector) apply(pkg *sdk.Package, values []string) int {
 	return len(normalized)
 }
 
-func matcherStats(matchedPackages, unmatchedPackages, licenses int) sdk.MatcherStats {
+func matcherStats(matchedPackages, unmatchedPackages, licenses int) sdkplugin.MatcherStats {
 	if unmatchedPackages < 0 {
 		unmatchedPackages = 0
 	}
-	return sdk.MatcherStats{
+	return sdkplugin.MatcherStats{
 		Name:              matcherName,
 		DisplayName:       "deps.dev License Matcher",
 		MatchedPackages:   matchedPackages,
@@ -372,7 +375,7 @@ func (c *Checker) fetchBatch(ctx context.Context, items []pending, stats *checkS
 	return nil
 }
 
-func versionRequestFromPackage(pkg *sdk.Package) (versionRequest, cache.Key, bool) {
+func versionRequestFromPackage(pkg *model.Package) (versionRequest, cache.Key, bool) {
 	if pkg == nil || strings.TrimSpace(pkg.Version) == "" {
 		return versionRequest{}, cache.Key{}, false
 	}
@@ -389,7 +392,7 @@ func versionRequestFromPackage(pkg *sdk.Package) (versionRequest, cache.Key, boo
 	return versionRequest{}, cache.Key{}, false
 }
 
-func versionKeyFromPackage(pkg *sdk.Package) (versionKey, bool) {
+func versionKeyFromPackage(pkg *model.Package) (versionKey, bool) {
 	if pkg == nil {
 		return versionKey{}, false
 	}
@@ -425,7 +428,7 @@ func depsDevSystem(ecosystem string) (string, bool) {
 	}
 }
 
-func depsDevName(pkg *sdk.Package) (string, bool) {
+func depsDevName(pkg *model.Package) (string, bool) {
 	if pkg == nil {
 		return "", false
 	}
