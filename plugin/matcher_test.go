@@ -10,15 +10,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bomly-dev/bomly-sdk"
 	cache "github.com/bomly-dev/bomly-sdk/filecache"
 	"github.com/bomly-dev/bomly-sdk/testkit"
 	"go.uber.org/zap"
+
+	"github.com/bomly-dev/bomly-sdk/model"
+	sdkplugin "github.com/bomly-dev/bomly-sdk/plugin"
 )
 
 func TestVersionRequestFromPackage(t *testing.T) {
 	t.Run("npm scoped package", func(t *testing.T) {
-		req, _, ok := versionRequestFromPackage(&sdk.Package{Coordinates: sdk.Coordinates{Ecosystem: "npm",
+		req, _, ok := versionRequestFromPackage(&model.Package{Coordinates: model.Coordinates{Ecosystem: "npm",
 			Org:     "@types",
 			Name:    "node",
 			Version: "20.12.0"},
@@ -32,7 +34,7 @@ func TestVersionRequestFromPackage(t *testing.T) {
 	})
 
 	t.Run("maven from purl", func(t *testing.T) {
-		req, _, ok := versionRequestFromPackage(&sdk.Package{Coordinates: sdk.Coordinates{PURL: "pkg:maven/org.slf4j/slf4j-api@2.0.13",
+		req, _, ok := versionRequestFromPackage(&model.Package{Coordinates: model.Coordinates{PURL: "pkg:maven/org.slf4j/slf4j-api@2.0.13",
 			Version: "2.0.13"},
 		})
 		if !ok {
@@ -44,7 +46,7 @@ func TestVersionRequestFromPackage(t *testing.T) {
 	})
 
 	t.Run("go purl esbuild", func(t *testing.T) {
-		req, _, ok := versionRequestFromPackage(&sdk.Package{Coordinates: sdk.Coordinates{PURL: "pkg:golang/github.com/evanw/esbuild@v0.28.0",
+		req, _, ok := versionRequestFromPackage(&model.Package{Coordinates: model.Coordinates{PURL: "pkg:golang/github.com/evanw/esbuild@v0.28.0",
 			Version: "v0.28.0"},
 		})
 		if !ok {
@@ -56,7 +58,7 @@ func TestVersionRequestFromPackage(t *testing.T) {
 	})
 
 	t.Run("go purl golang x module", func(t *testing.T) {
-		req, _, ok := versionRequestFromPackage(&sdk.Package{Coordinates: sdk.Coordinates{PURL: "pkg:golang/golang.org/x/net@v0.55.0",
+		req, _, ok := versionRequestFromPackage(&model.Package{Coordinates: model.Coordinates{PURL: "pkg:golang/golang.org/x/net@v0.55.0",
 			Version: "v0.55.0"},
 		})
 		if !ok {
@@ -68,7 +70,7 @@ func TestVersionRequestFromPackage(t *testing.T) {
 	})
 
 	t.Run("unsupported ecosystem", func(t *testing.T) {
-		if _, _, ok := versionRequestFromPackage(&sdk.Package{Coordinates: sdk.Coordinates{Ecosystem: "conan",
+		if _, _, ok := versionRequestFromPackage(&model.Package{Coordinates: model.Coordinates{Ecosystem: "conan",
 			Name:    "openssl",
 			Version: "1.1.1s"},
 		}); ok {
@@ -77,7 +79,7 @@ func TestVersionRequestFromPackage(t *testing.T) {
 	})
 
 	t.Run("deps.dev unsupported systems are rejected", func(t *testing.T) {
-		cases := []sdk.Coordinates{
+		cases := []model.Coordinates{
 			{Ecosystem: "php", Name: "guzzlehttp/guzzle", Version: "6.2.3"},
 			{Ecosystem: "elixir", Name: "plug", Version: "1.16.1"},
 			{Ecosystem: "dart", Name: "http", Version: "1.2.0"},
@@ -88,7 +90,7 @@ func TestVersionRequestFromPackage(t *testing.T) {
 			{PURL: "pkg:cocoapods/Alamofire@5.8.1", Version: "5.8.1"},
 		}
 		for _, tc := range cases {
-			if req, _, ok := versionRequestFromPackage(&sdk.Package{Coordinates: tc}); ok {
+			if req, _, ok := versionRequestFromPackage(&model.Package{Coordinates: tc}); ok {
 				t.Fatalf("expected unsupported package to be rejected, got %#v", req)
 			}
 		}
@@ -121,7 +123,7 @@ func TestCheckerMatch_RefetchesCachedEmptyLicenseSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFileCache() error = %v", err)
 	}
-	pkg := &sdk.Package{Coordinates: sdk.Coordinates{PURL: "pkg:golang/golang.org/x/net@v0.55.0", Version: "v0.55.0"}}
+	pkg := &model.Package{Coordinates: model.Coordinates{PURL: "pkg:golang/golang.org/x/net@v0.55.0", Version: "v0.55.0"}}
 	_, cacheKey, ok := versionRequestFromPackage(pkg)
 	if !ok {
 		t.Fatal("expected package to produce cache key")
@@ -140,14 +142,14 @@ func TestCheckerMatch_RefetchesCachedEmptyLicenseSet(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	g := sdk.New()
-	dep := testkit.MustDependencyCoords(t, sdk.Coordinates{Ecosystem: sdk.EcosystemGo, Name: "golang.org/x/net", Version: "v0.55.0"})
+	g := model.New()
+	dep := testkit.MustDependencyCoords(t, model.Coordinates{Ecosystem: model.EcosystemGo, Name: "golang.org/x/net", Version: "v0.55.0"})
 	if err := g.AddNode(dep); err != nil {
 		t.Fatalf("add dependency: %v", err)
 	}
-	registry := sdk.NewPackageRegistry()
+	registry := model.NewPackageRegistry()
 
-	result, err := checker.Match(context.Background(), sdk.MatchRequest{Graph: g, Registry: registry})
+	result, err := checker.Match(context.Background(), sdkplugin.MatchRequest{Graph: g, Registry: registry})
 	if err != nil {
 		t.Fatalf("Match() error = %v", err)
 	}
@@ -188,12 +190,12 @@ func TestCheckerMatch_DoesNotCacheEmptyAPIResponse(t *testing.T) {
 	}
 
 	for i := range 2 {
-		g := sdk.New()
-		dep := testkit.MustDependencyCoords(t, sdk.Coordinates{Ecosystem: sdk.EcosystemGo, Name: "golang.org/x/net", Version: "v0.55.0"})
+		g := model.New()
+		dep := testkit.MustDependencyCoords(t, model.Coordinates{Ecosystem: model.EcosystemGo, Name: "golang.org/x/net", Version: "v0.55.0"})
 		if err := g.AddNode(dep); err != nil {
 			t.Fatalf("add dependency: %v", err)
 		}
-		if _, err := checker.Match(context.Background(), sdk.MatchRequest{Graph: g, Registry: sdk.NewPackageRegistry()}); err != nil {
+		if _, err := checker.Match(context.Background(), sdkplugin.MatchRequest{Graph: g, Registry: model.NewPackageRegistry()}); err != nil {
 			t.Fatalf("Match() run %d error = %v", i+1, err)
 		}
 	}
@@ -237,16 +239,16 @@ func TestCheckerMatch_ChunksVersionBatchRequests(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	g := sdk.New()
+	g := model.New()
 	for i := range maxBatchRequests + 1 {
 		name := "example.com/mod" + strconv.Itoa(i)
-		dep := testkit.MustDependencyCoords(t, sdk.Coordinates{Ecosystem: sdk.EcosystemGo, Name: name, Version: "v1.0.0"})
+		dep := testkit.MustDependencyCoords(t, model.Coordinates{Ecosystem: model.EcosystemGo, Name: name, Version: "v1.0.0"})
 		if err := g.AddNode(dep); err != nil {
 			t.Fatalf("add dependency %d: %v", i, err)
 		}
 	}
 
-	result, err := checker.Match(context.Background(), sdk.MatchRequest{Graph: g, Registry: sdk.NewPackageRegistry()})
+	result, err := checker.Match(context.Background(), sdkplugin.MatchRequest{Graph: g, Registry: model.NewPackageRegistry()})
 	if err != nil {
 		t.Fatalf("Match() error = %v", err)
 	}
@@ -296,9 +298,9 @@ func TestCheckerMatch_EnrichesMissingOnly(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	g := sdk.New()
-	missing := testkit.MustDependencyCoords(t, sdk.Coordinates{Ecosystem: "npm", Name: "react", Version: "18.2.0"})
-	existing := testkit.MustDependencyCoords(t, sdk.Coordinates{Ecosystem: "npm", Name: "zod", Version: "3.23.0"})
+	g := model.New()
+	missing := testkit.MustDependencyCoords(t, model.Coordinates{Ecosystem: "npm", Name: "react", Version: "18.2.0"})
+	existing := testkit.MustDependencyCoords(t, model.Coordinates{Ecosystem: "npm", Name: "zod", Version: "3.23.0"})
 	if err := g.AddNode(missing); err != nil {
 		t.Fatalf("add missing dependency: %v", err)
 	}
@@ -306,11 +308,11 @@ func TestCheckerMatch_EnrichesMissingOnly(t *testing.T) {
 		t.Fatalf("add existing dependency: %v", err)
 	}
 
-	registry := sdk.NewPackageRegistry()
+	registry := model.NewPackageRegistry()
 	existingPURL := existing.NodeID()
-	registry.Ensure(existingPURL).Licenses = []sdk.PackageLicense{{SPDXExpression: "Apache-2.0"}}
+	registry.Ensure(existingPURL).Licenses = []model.PackageLicense{{SPDXExpression: "Apache-2.0"}}
 
-	result, err := checker.Match(context.Background(), sdk.MatchRequest{
+	result, err := checker.Match(context.Background(), sdkplugin.MatchRequest{
 		Graph:    g,
 		Registry: registry,
 	})
@@ -362,19 +364,19 @@ func TestCheckerMatch_EnrichesMissingOnly(t *testing.T) {
 // depsDevSystem actually accepts. This catches a new case being added to one
 // without the other.
 func TestDescriptorEcosystemsMatchSupportedSystems(t *testing.T) {
-	all := []sdk.Ecosystem{
-		sdk.EcosystemNPM, sdk.EcosystemMaven, sdk.EcosystemGo, sdk.EcosystemPython,
-		sdk.EcosystemALPM, sdk.EcosystemAPK, sdk.EcosystemCPP, sdk.EcosystemConda,
-		sdk.EcosystemDart, sdk.EcosystemDPKG, sdk.EcosystemElixir, sdk.EcosystemErlang,
-		sdk.EcosystemGitHub, sdk.EcosystemHaskell, sdk.EcosystemHomebrew, sdk.EcosystemLua,
-		sdk.EcosystemDotNet, sdk.EcosystemNix, sdk.EcosystemOCaml, sdk.EcosystemPHP,
-		sdk.EcosystemPortage, sdk.EcosystemProlog, sdk.EcosystemR, sdk.EcosystemRPM,
-		sdk.EcosystemRuby, sdk.EcosystemRust, sdk.EcosystemScala, sdk.EcosystemSBOM,
-		sdk.EcosystemSnap, sdk.EcosystemSwift, sdk.EcosystemTerraform,
-		sdk.EcosystemWordPress, sdk.EcosystemOther,
+	all := []model.Ecosystem{
+		model.EcosystemNPM, model.EcosystemMaven, model.EcosystemGo, model.EcosystemPython,
+		model.EcosystemALPM, model.EcosystemAPK, model.EcosystemCPP, model.EcosystemConda,
+		model.EcosystemDart, model.EcosystemDPKG, model.EcosystemElixir, model.EcosystemErlang,
+		model.EcosystemGitHub, model.EcosystemHaskell, model.EcosystemHomebrew, model.EcosystemLua,
+		model.EcosystemDotNet, model.EcosystemNix, model.EcosystemOCaml, model.EcosystemPHP,
+		model.EcosystemPortage, model.EcosystemProlog, model.EcosystemR, model.EcosystemRPM,
+		model.EcosystemRuby, model.EcosystemRust, model.EcosystemScala, model.EcosystemSBOM,
+		model.EcosystemSnap, model.EcosystemSwift, model.EcosystemTerraform,
+		model.EcosystemWordPress, model.EcosystemOther,
 	}
 
-	declared := make(map[sdk.Ecosystem]bool)
+	declared := make(map[model.Ecosystem]bool)
 	for _, eco := range (&Checker{}).Descriptor().SupportedEcosystems {
 		declared[eco] = true
 	}
@@ -403,7 +405,7 @@ func TestFetchBatchRejectsOversizedResponse(t *testing.T) {
 		logger: zap.NewNop(),
 	}
 	err := checker.fetchBatch(context.Background(), []pending{{
-		pkg: &sdk.Package{},
+		pkg: &model.Package{},
 		req: versionRequest{VersionKey: versionKey{System: "NPM", Name: "example", Version: "1.0.0"}},
 	}}, nil, &licenseCollector{})
 	if err == nil || !strings.Contains(err.Error(), "16 MiB limit") {
@@ -424,7 +426,7 @@ func TestFetchBatchDoesNotExposeErrorResponseBody(t *testing.T) {
 		logger: zap.NewNop(),
 	}
 	err := checker.fetchBatch(context.Background(), []pending{{
-		pkg: &sdk.Package{},
+		pkg: &model.Package{},
 		req: versionRequest{VersionKey: versionKey{System: "NPM", Name: "example", Version: "1.0.0"}},
 	}}, nil, &licenseCollector{})
 	if err == nil || !strings.Contains(err.Error(), "status 502") {
