@@ -28,8 +28,9 @@ This matcher performs network calls **only during enrichment** (`bomly scan
   most 100 packages per request.
 
 Results are cached on disk (default `~/.bomly/cache/licenses/depsdev`,
-24h TTL). Cache failures are non-fatal: the matcher logs a warning and
-continues without caching.
+24h TTL). The cache directory must be creatable, or the matcher fails to
+start. A failed cache write is non-fatal: the matcher logs a warning and
+continues.
 
 ## Access
 
