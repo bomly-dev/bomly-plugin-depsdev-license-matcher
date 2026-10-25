@@ -42,7 +42,7 @@ continues.
 | Network `api.deps.dev` | The deps.dev API the matcher queries |
 | Environment `HOME`, `USERPROFILE` | `os.UserHomeDir` reads `HOME` (`USERPROFILE` on Windows) to locate the default cache |
 
-Setting `cache_dir` or `api_base` moves the cache or the API to a place you chose; the declaration describes the defaults. The matcher needs no particular pipeline input beyond the packages it is asked to enrich, so it declares no requirements.
+Setting `cache_dir` or `api_base` moves the cache or the API to a place you chose; the declaration describes the defaults. If Bomly cannot find your home directory, the cache falls back to `.bomly-cache/licenses/depsdev` in the directory Bomly runs in, which the access block does not cover ([bomly-planning#115](https://github.com/bomly-dev/bomly-planning/issues/115)). The matcher needs no particular pipeline input beyond the packages it is asked to enrich, so it declares no requirements.
 
 ## Configuration
 
