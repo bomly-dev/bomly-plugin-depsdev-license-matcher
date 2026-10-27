@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -434,5 +435,48 @@ func TestFetchBatchDoesNotExposeErrorResponseBody(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), privateDetail) {
 		t.Fatalf("fetchBatch() exposed response body: %v", err)
+	}
+}
+
+// TestNoHomeDirectoryRunsWithoutACache is bomly-planning#115: with no home
+// directory there is no default cache, so the matcher still constructs, still
+// enriches -- asking deps.dev every time -- and writes nothing into the
+// directory it was started in.
+func TestNoHomeDirectoryRunsWithoutACache(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	t.Setenv("home", "")
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	var hits int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		if err := json.NewEncoder(w).Encode(versionBatchResponse{
+			Responses: []versionBatchResult{{Version: depsDevVersion{Licenses: []string{"BSD-3-Clause"}}}},
+		}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	checker, err := New(Config{APIBase: server.URL, Client: server.Client()})
+	if err != nil {
+		t.Fatalf("New with no home directory: %v", err)
+	}
+	for i := range 2 {
+		g := model.New()
+		dep := testkit.MustDependencyCoords(t, model.Coordinates{Ecosystem: model.EcosystemGo, Name: "golang.org/x/net", Version: "v0.55.0"})
+		if err := g.AddNode(dep); err != nil {
+			t.Fatalf("add dependency: %v", err)
+		}
+		if _, err := checker.Match(context.Background(), sdkplugin.MatchRequest{Graph: g, Registry: model.NewPackageRegistry()}); err != nil {
+			t.Fatalf("Match() run %d: %v", i+1, err)
+		}
+	}
+	if hits != 2 {
+		t.Errorf("deps.dev hits = %d, want 2: nothing should be cached", hits)
+	}
+	if entries, _ := os.ReadDir(cwd); len(entries) != 0 {
+		t.Errorf("the matcher wrote %d entries into the working directory", len(entries))
 	}
 }

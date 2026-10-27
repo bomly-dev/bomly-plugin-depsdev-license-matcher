@@ -8,9 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -60,12 +58,16 @@ func DefaultConfig() Config {
 	}
 }
 
+// defaultCacheDir returns ~/.bomly/cache/licenses/depsdev, or "" -- which runs
+// the matcher without a cache -- when there is no home directory. It never
+// falls back to a path relative to the working directory, which no access
+// declaration describes (bomly-planning#115).
 func defaultCacheDir() string {
-	home, err := os.UserHomeDir()
+	dir, err := cache.DefaultDir("licenses", "depsdev")
 	if err != nil {
-		return filepath.Join(".bomly-cache", "licenses", "depsdev")
+		return ""
 	}
-	return filepath.Join(home, ".bomly", "cache", "licenses", "depsdev")
+	return dir
 }
 
 // Checker enriches package licenses from deps.dev.
@@ -109,9 +111,15 @@ func New(config Config) (*Checker, error) {
 	if strings.TrimSpace(config.CacheDir) == "" {
 		config.CacheDir = defaultCacheDir()
 	}
-	fileCache, err := cache.NewFileCache(config.CacheDir, config.CacheTTL)
-	if err != nil {
-		return nil, fmt.Errorf("deps.dev matcher: %w", err)
+	// No directory means no cache: a nil *FileCache misses every Get and
+	// ignores every Set, so the matcher runs uncached.
+	var fileCache *cache.FileCache
+	var err error
+	if config.CacheDir != "" {
+		fileCache, err = cache.NewFileCache(config.CacheDir, config.CacheTTL)
+		if err != nil {
+			return nil, fmt.Errorf("deps.dev matcher: %w", err)
+		}
 	}
 	logger := config.Logger
 	if logger == nil {
